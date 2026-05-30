@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, orientation=landscape">
+    <title>2D Arena: Ultimate Crossplay</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }
+        body {
+            background: #0f0c20;
+            color: #fff;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Querformat-Hinweis für Handys */
+        @media screen and (orientation: portrait) {
+            #landscape-warning { display: flex !important; }
+            #game-container { display: none; }
+        }
+
+        #landscape-warning {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #111;
+            z-index: 9999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+        #landscape-warning h2 { margin-bottom: 10px; color: #ff4757; }
+
+        /* Das Spielfeld-Gehäuse (Immer 16:9 Querformat) */
+        #game-container {
+            position: relative;
+            width: 100vmin;
+            height: 56.25vmin; /* 16:9 Ratio */
+            max-width: 960px;
+            max-height: 540px;
+            background: #000;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            border: 2px solid #333;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            background: #2c3e50;
+            display: block;
+        }
+
+        /* --- MENÜ SYSTEM STYLE --- */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            gap: 15px;
+            transition: all 0.3s ease;
+        }
+        .hidden { display: none !important; }
+
+        h1 { font-size: 2.5rem; text-shadow: 0 4px 10px rgba(0,0,0,0.5); color: #00d2d3; letter-spacing: 2px; }
+        h2 { font-size: 1.5rem; color: #fff; }
+
+        .btn {
+            width: 250px;
+            padding: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #fff;
+            background: #341f97;
+            border: 2px solid #5f27cd;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .btn:active { transform: scale(0.98); background: #5f27cd; }
+        .btn-back { background: #ff4757; border-color: #ff6b81; width: 150px; margin-top: 10px; }
+        .btn-back:active { background: #ff6b81; }
+
+        input[type="text"] {
+            width: 250px;
+            padding: 10px;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            border: 2px solid #5f27cd;
+            background: #1e1b4b;
+            color: #fff;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        /* --- INGAME UI --- */
+        #server-code-display {
+            position: absolute;
+            top: 10px; left: 10px;
+            background: rgba(0,0,0,0.6);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            border-left: 3px solid #ff9f43;
+            pointer-events: none;
+            z-index: 5;
+        }
+        #player-count {
+            position: absolute;
+            top: 10px; right: 10px;
+            background: rgba(0,0,0,0.6);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Mobile Touch-Controls (Optimiert fürs Querformat) */
+        .mobile-controls {
+            display: none;
+            position: absolute;
+            bottom: 15px; width: 100%;
+            padding: 0 30px;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 6;
+        }
+        .btn-group { display: flex; gap: 20px; pointer-events: auto; }
+        .touch-btn {
+            width: 60px; height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid #fff;
+            border-radius: 50%;
+            color: white; font-size: 24px; font-weight: bold;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .touch-btn:active { background: rgba(255, 255, 255, 0.5); }
+        #btn-attack { background: rgba(235, 77, 75, 0.5); border-color: #eb4d4b; }
+    </style>
+</head>
+<body>
+
+<div id="landscape-warning">
+    <h2>🔄 Bitte drehe dein Handy!</h2>
+    <p>Dieses Spiel wird im Querformat (Landscape) gespielt.</p>
+</div>
+
+<div id="game-container">
+    
+    <div id="menu-main" class="screen">
+        <h1>2D ARENA BRAWL</h1>
+        <button class="btn" onclick="startOffline()">Offline (vs Bot)</button>
+        <button class="btn" onclick="showScreen('menu-online')">Online Multiplayer</button>
+        <div style="margin-top: 15px; display:flex; flex-direction:column; gap:5px; align-items:center;">
+            <label style="font-size:0.9rem; color:#aaa;">Server-Code beitreten:</label>
+            <input type="text" id="join-code-input" placeholder="CODE EINGEBEN" maxlength="6">
+            <button class="btn" style="width:200px; padding:8px; background:#10ac84; border-color:#1dd1a1;" onclick="joinPrivateServer()">Code beitreten</button>
+        </div>
+    </div>
+
+    <div id="menu-online" class="screen hidden">
+        <h1>ONLINE MODUS</h1>
+        <button class="btn" onclick="startMatchmaking()">Schnelles Spiel</button>
+        <button class="btn" onclick="createPrivateServer()">Privates Spiel erstellen</button>
+        <button class="btn btn-back" onclick="showScreen('menu-main')">Zurück</button>
+    </div>
+
+    <div id="menu-lobby" class="screen hidden">
+        <h1 id="lobby-status">Suche Mitspieler...</h1>
+        <h2>Spieler im Server: <span id="lobby-count">1</span> / 12</h2>
+        <div style="font-size: 0.9rem; color: #ff9f43;" id="lobby-type-text">Modus: Schnelles Spiel</div>
+        <button class="btn btn-back" onclick="cancelMatchmaking()">Verlassen</button>
+    </div>
+
+    <div id="ingame-hud" class="hidden">
+        <div id="server-code-display">Code: <span id="hud-code-text">OFFLINE</span></div>
+        <div id="player-count">Spieler: <span id="hud-players">1</span>/12</div>
+    </div>
+
+    <canvas id="gameCanvas" width="960" height="540"></canvas>
+
+    <div class="mobile-controls" id="mobileUI">
+        <div class="btn-group">
+            <div class="touch-btn" id="btn-left">◀</div>
+            <div class="touch-btn" id="btn-right">▶</div>
+        </div>
+        <div class="btn-group">
+            <div class="touch-btn" id="btn-jump">▲</div>
+            <div class="touch-btn" id="btn-attack">⚔️</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Touch-Geräte Erkennung
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || ('ontouchstart' in window);
+    if (isMobile) { document.getElementById("mobileUI").style.display = "flex"; }
+
+    let gameState = "menu"; // menu, lobby, playing
+    let isOnline = false;
+    let serverCode = "";
+    let maxPlayers = 12;
+    let currentConnectedPlayers = 1;
+
+    // Spieler-Klasse
+    class Player {
+        constructor(x, y, color, isBot = false) {
+            this.x = x; this.y = y;
+            this.width = 40; this.height = 60;
+            this.color = color;
+            this.speed = 5; this.velocityX = 0; this.velocityY = 0;
+            this.jumping = false; this.hp = 100;
+            this.isAttacking = false; this.direction = "right";
+            this.isBot = isBot;
+        }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            // Augen-Blickrichtung
+            ctx.fillStyle = "#fff";
+            let eyeX = this.direction === "right" ? this.x + this.width - 12 : this.x + 4;
+            ctx.fillRect(eyeX, this.y + 10, 8, 8);
+
+            if (this.isAttacking) {
+                ctx.fillStyle = "#f1c40f";
+                let atkX = this.direction === "right" ? this.x + this.width : this.x - 30;
+                ctx.fillRect(atkX, this.y + 15, 30, 15);
+            }
+            // HP-Leiste
+            ctx.fillStyle = "red"; ctx.fillRect(this.x, this.y - 12, this.width, 5);
+            ctx.fillStyle = "green"; ctx.fillRect(this.x, this.y - 12, (this.width * this.hp) / 100, 5);
+        }
+        update() {
+            this.velocityY += 0.6; // Gravity
+            this.x += this.velocityX; this.y += this.velocityY;
+            if (this.y > 440 - this.height) { this.y = 440 - this.height; this.velocityY = 0; this.jumping = false; }
+            if (this.x < 0) this.x = 0;
+            if (this.x > canvas.width - this.width) this.x = canvas.width - this.width;
+        }
+        attack() {
+            if (this.isAttacking) return;
+            this.isAttacking = true;
+            let atkX = this.direction === "right" ? this.x + this.width : this.x - 30;
+            let target = this.isBot ? player : bot;
+            if (target && atkX + 30 > target.x && atkX < target.x + target.width && this.y + 15 + 15 > target.y && this.y + 15 < target.y + target.height) {
+                target.hp -= 10;
+                if (target.hp < 0) target.hp = 0;
+            }
+            setTimeout(() => this.isAttacking = false, 150);
+        }
+    }
+
+    let player = new Player(150, 200, "#2ecc71");
+    let bot = null; 
+
+    // --- MENÜ LOGIK ---
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+        document.getElementById(screenId).classList.remove('hidden');
+    }
+
+    function startOffline() {
+        isOnline = false;
+        serverCode = "LOCAL";
+        currentConnectedPlayers = 1;
+        bot = new Player(700, 200, "#e74c3c", true);
+        startGame();
+    }
+
+    function startMatchmaking() {
+        showScreen('menu-lobby');
+        document.getElementById("lobby-status").innerText = "Suche Mitspieler...";
+        document.getElementById("lobby-type-text").innerText = "Modus: Schnelles Spiel (Max. 12)";
+        document.getElementById("hud-code-text").innerText = "SCHNELLES SPIEL";
+        
+        // Simuliere, dass Spieler beitreten (Da noch kein Server-Backend läuft)
+        let count = 1;
+        let interval = setInterval(() => {
+            if (gameState !== "lobby") { clearInterval(interval); return; }
+            count += Math.floor(Math.random() * 3) + 1;
+            if (count >= 6) {
+                count = 6; // Starten wir mit 6 Spielern
+                clearInterval(interval);
+                currentConnectedPlayers = count;
+                startGame();
+            }
+            document.getElementById("lobby-count").innerText = count;
+        }, 1200);
+        gameState = "lobby";
+    }
+
+    function createPrivateServer() {
+        // Generiert einen zufälligen 6-stelligen Code
+        serverCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        showScreen('menu-lobby');
+        document.getElementById("lobby-status").innerText = "Privater Raum erstellt!";
+        document.getElementById("lobby-type-text").innerText = "Sende den Code oben links an Freunde!";
+        document.getElementById("hud-code-text").innerText = serverCode;
+        document.getElementById("lobby-count").innerText = "1";
+        
+        gameState = "lobby";
+    }
+
+    function joinPrivateServer() {
+        let code = document.getElementById("join-code-input").value.trim().toUpperCase();
+        if (code.length < 4) {
+            alert("Bitte gib einen gültigen Code ein!");
+            return;
+        }
+        serverCode = code;
+        document.getElementById("hud-code-text").innerText = serverCode;
+        showScreen('menu-lobby');
+        document.getElementById("lobby-status").innerText = "Verbinde mit Raum: " + serverCode;
+        document.getElementById("lobby-type-text").innerText = "Warte auf Host...";
+        
+        setTimeout(() => {
+            currentConnectedPlayers = 2; // Simulierter Beitritt
+            startGame();
+        }, 1500);
+        gameState = "lobby";
+    }
+
+    function cancelMatchmaking() {
+        gameState = "menu";
+        showScreen('menu-main');
+    }
+
+    function startGame() {
+        showScreen('none'); // Blendet alle Menü-Screens aus
+        document.getElementById("ingame-hud").classList.remove("hidden");
+        document.getElementById("hud-players").innerText = currentConnectedPlayers;
+        player = new Player(150, 200, "#2ecc71");
+        if (!isOnline) bot = new Player(700, 200, "#e74c3c", true);
+        gameState = "playing";
+    }
+
+    // --- INPUTS ---
+    const keys = {};
+    window.addEventListener("keydown", (e) => {
+        keys[e.code] = true;
+        if ((e.code === "Space" || e.code === "KeyF") && gameState === "playing") player.attack();
+    });
+    window.addEventListener("keyup", (e) => { keys[e.code] = false; });
+
+    const bindTouch = (id, keyCode) => {
+        const btn = document.getElementById(id);
+        btn.addEventListener("touchstart", (e) => { e.preventDefault(); keys[keyCode] = true; });
+        btn.addEventListener("touchend", (e) => { e.preventDefault(); keys[keyCode] = false; });
+    };
+    bindTouch("btn-left", "KeyA");
+    bindTouch("btn-right", "KeyD");
+    bindTouch("btn-jump", "KeyW");
+    document.getElementById("btn-attack").addEventListener("touchstart", (e) => {
+        e.preventDefault(); if (gameState === "playing") player.attack();
+    });
+
+    // --- GAME LOOP ---
+    function loop() {
+        if (gameState === "playing") {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Arena zeichnen
+            ctx.fillStyle = "#222f3e"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#10ac84"; ctx.fillRect(0, 440, canvas.width, 100); // Boden
+
+            // Spielersteuerung verarbeiten
+            player.velocityX = 0;
+            if (keys["KeyA"] || keys["ArrowLeft"]) { player.velocityX = -player.speed; player.direction = "left"; }
+            if (keys["KeyD"] || keys["ArrowRight"]) { player.velocityX = player.speed; player.direction = "right"; }
+            if ((keys["KeyW"] || keys["ArrowUp"]) && !player.jumping) { player.velocityY = -12; player.jumping = true; }
+
+            player.update();
+            player.draw();
+
+            // Wenn Offline: Bot-KI berechnen
+            if (bot) {
+                if (bot.hp > 0) {
+                    if (bot.x > player.x + 50) { bot.velocityX = -2; bot.direction = "left"; }
+                    else if (bot.x < player.x - 50) { bot.velocityX = 2; bot.direction = "right"; }
+                    else { bot.velocityX = 0; bot.attack(); }
+                    bot.update();
+                    bot.draw();
+                }
+            }
+
+            // Game Over Check
+            if (player.hp <= 0 || (bot && bot.hp <= 0)) {
+                ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#fff"; ctx.font = "bold 30px sans-serif"; ctx.textAlign = "center";
+                ctx.fillText(player.hp <= 0 ? "GAME OVER! VERLOREN." : "SIEG! DU HAST GEWONNEN!", canvas.width/2, canvas.height/2);
+                ctx.font = "18px sans-serif"; ctx.fillText("Klicke F5 oder lade neu für Hauptmenü", canvas.width/2, canvas.height/2 + 40);
+            }
+        }
+        requestAnimationFrame(loop);
+    }
+    loop();
+</script>
+</body>
+  </html>
+
